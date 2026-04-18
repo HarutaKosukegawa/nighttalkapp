@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/* ===== カラーパレット ===== */
+/* ===== フォント変数 ===== */
+:root {
+  --font-brand: 'Dela Gothic One', sans-serif;
+  --bg: #060c1a;
+  --bg-card: rgba(255,255,255,0.06);
+  --bg-card-hover: rgba(255,255,255,0.1);
+  --border: rgba(255,255,255,0.1);
+  --text: #ffffff;
+  --text-muted: rgba(255,255,255,0.5);
+  --gold: #C9A96E;
+  --gold-light: #e8cc9a;
+  --orange: #D4622A;
+  --green: #3A9E6F;
+  --blue: #4B9FE8;
+  --purple: #9B6CC4;
+  --radius: 16px;
+}
+
+/* ===== ベース ===== */
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-zen-kaku), 'Zen Kaku Gothic New', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ===== 星フィールド ===== */
+.star-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 30% 20%, #0d1b3e 0%, #060c1a 60%);
+}
+
+.star {
+  position: absolute;
+  border-radius: 50%;
+  background: white;
+  animation: twinkle 3s ease-in-out infinite alternate;
+}
+
+@keyframes twinkle {
+  0%   { opacity: var(--op-from); transform: scale(1); }
+  100% { opacity: var(--op-to);   transform: scale(1.3); }
+}
+
+/* ===== 流れ星 ===== */
+.shooting-star {
+  position: absolute;
+  width: 120px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.8), white);
+  border-radius: 50%;
+  animation: shoot 6s ease-in-out infinite;
+  opacity: 0;
+}
+
+@keyframes shoot {
+  0%   { transform: translateX(0) translateY(0) rotate(35deg); opacity: 0; }
+  5%   { opacity: 1; }
+  30%  { opacity: 0.8; }
+  50%  { transform: translateX(600px) translateY(300px) rotate(35deg); opacity: 0; }
+  100% { transform: translateX(600px) translateY(300px) rotate(35deg); opacity: 0; }
+}
+
+.shooting-star:nth-child(1) { top: 10%; left: -5%;  animation-delay: 0s;   animation-duration: 5s; }
+.shooting-star:nth-child(2) { top: 5%;  left: 20%;  animation-delay: 2.5s; animation-duration: 6s; }
+.shooting-star:nth-child(3) { top: 20%; left: 50%;  animation-delay: 5s;   animation-duration: 4s; }
+.shooting-star:nth-child(4) { top: 3%;  left: 70%;  animation-delay: 8s;   animation-duration: 7s; }
+.shooting-star:nth-child(5) { top: 15%; left: 10%;  animation-delay: 11s;  animation-duration: 5s; }
+.shooting-star:nth-child(6) { top: 8%;  left: 40%;  animation-delay: 14s;  animation-duration: 6s; }
+
+/* ===== カード ===== */
+.glass-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+}
+
+.glass-card:hover {
+  background: var(--bg-card-hover);
+}
+
+/* ===== ボタン ===== */
+.btn-primary {
+  background: var(--gold);
+  color: #060c1a;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 12px 24px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-primary:hover  { opacity: 0.9; }
+.btn-primary:active { transform: scale(0.97); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  color: var(--gold);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 12px 24px;
+  border: 1.5px solid var(--gold);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-outline:hover { background: rgba(201,169,110,0.1); }
+
+/* ===== フォームフィールド ===== */
+.dark-input {
+  width: 100%;
+  background: rgba(255,255,255,0.07);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: white;
+  font-size: 16px;
+  font-family: var(--font-zen-kaku), sans-serif;
+  transition: border-color 0.15s;
+  outline: none;
+}
+.dark-input::placeholder { color: rgba(255,255,255,0.3); }
+.dark-input:focus        { border-color: var(--gold); }
+
+/* ===== スクロールバー ===== */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+/* ===== アニメーション ===== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp 0.4s ease forwards; }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(201,169,110,0.3); }
+  50%       { box-shadow: 0 0 20px rgba(201,169,110,0.6); }
+}
+.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
