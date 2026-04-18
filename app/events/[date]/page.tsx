@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import ParticipantListClient from './ParticipantListClient'
-import AIMatchButton from './AIMatchButton'
 import type { Participant } from '@/types/database'
 import { UsersIcon } from '@/components/Icons'
 
@@ -123,10 +122,6 @@ export default async function EventDatePage({
         </div>
       ) : (
         <>
-          {/* AIマッチングボタン */}
-          <div className="px-4 mb-4">
-            <AIMatchButton participants={participants} eventDate={date} />
-          </div>
           <ParticipantListClient participants={participants} eventDate={date} />
         </>
       )}
