@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import TalkRequestButton from './TalkRequestButton'
 import type { Participant } from '@/types/database'
 import { ZapIcon, StarIcon, CloudIcon, ChatIcon, ArrowLeftIcon } from '@/components/Icons'
 
@@ -13,11 +12,6 @@ async function getParticipant(userId: string): Promise<Participant | null> {
   return data
 }
 
-async function getRequestCount(toId: string): Promise<number> {
-  const { count } = await supabase
-    .from('talk_requests').select('*', { count: 'exact', head: true }).eq('to_participant_id', toId)
-  return count ?? 0
-}
 
 const INFO_SECTIONS = [
   { key: 'activity' as const,    label: '活動・やっていること', Icon: ZapIcon },
@@ -32,7 +26,7 @@ export default async function ParticipantDetailPage({
   params: Promise<{ date: string; userId: string }>
 }) {
   const { date, userId } = await params
-  const [participant, requestCount] = await Promise.all([getParticipant(userId), getRequestCount(userId)])
+  const participant = await getParticipant(userId)
   if (!participant) notFound()
 
   return (
@@ -56,12 +50,6 @@ export default async function ParticipantDetailPage({
                 <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
               </svg>
               <span className="text-sm" style={{ color: 'var(--text-muted)' }}>写真なし</span>
-            </div>
-          )}
-          {requestCount > 0 && (
-            <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full text-sm font-bold pulse-glow"
-              style={{ background: 'var(--gold)', color: '#060c1a' }}>
-              {requestCount}人が話したい
             </div>
           )}
         </div>
@@ -97,7 +85,6 @@ export default async function ParticipantDetailPage({
         ))}
       </div>
 
-      <TalkRequestButton participantId={participant.id} participantName={participant.name} eventDate={date} />
     </div>
   )
 }
