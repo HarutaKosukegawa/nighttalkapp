@@ -4,19 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import type { Participant } from '@/types/database'
-import { ChatIcon, ZapIcon } from '@/components/Icons'
-
-const TAG_COLORS = [
-  { bg: 'rgba(75,159,232,0.15)', text: '#4B9FE8', border: 'rgba(75,159,232,0.3)' },
-  { bg: 'rgba(58,158,111,0.15)', text: '#3dd68c', border: 'rgba(58,158,111,0.3)' },
-  { bg: 'rgba(155,108,196,0.15)', text: '#b07fd4', border: 'rgba(155,108,196,0.3)' },
-  { bg: 'rgba(201,169,110,0.15)', text: '#C9A96E', border: 'rgba(201,169,110,0.3)' },
-  { bg: 'rgba(212,98,42,0.15)', text: '#e8845a', border: 'rgba(212,98,42,0.3)' },
-]
-
-function getTagColor(index: number) {
-  return TAG_COLORS[index % TAG_COLORS.length]
-}
 
 export default function ParticipantListClient({
   participants,
@@ -35,23 +22,19 @@ export default function ParticipantListClient({
     <div className="px-4 space-y-3">
       {participants.map((p, i) => {
         const isMe = p.id === myId
-        const tag = getTagColor(i)
         return (
           <Link
             key={p.id}
             href={`/events/${eventDate}/${p.id}`}
             className="glass-card flex gap-0 overflow-hidden animate-fade-in-up block transition-all"
-            style={{
-              animationDelay: `${i * 50}ms`,
-              opacity: 0,
-            }}
+            style={{ animationDelay: `${i * 50}ms`, opacity: 0 }}
           >
             {/* 写真エリア */}
-            <div className="relative flex-shrink-0" style={{ width: 90, height: 110 }}>
+            <div className="relative flex-shrink-0" style={{ width: 90, minHeight: 130 }}>
               {p.outfit_photo_url ? (
                 <Image
                   src={p.outfit_photo_url}
-                  alt={`${p.name}の服装`}
+                  alt={`${p.name}の写真`}
                   fill
                   style={{ objectFit: 'cover' }}
                   sizes="90px"
@@ -79,13 +62,18 @@ export default function ParticipantListClient({
 
             {/* テキストエリア */}
             <div className="flex-1 px-3 py-3 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <p
-                  className="font-bold text-base leading-tight"
-                  style={{ color: 'var(--text)', fontFamily: 'var(--font-space-mono)' }}
-                >
-                  {p.name}
-                </p>
+              {/* 名前・年齢 */}
+              <div className="flex items-baseline gap-2 justify-between">
+                <div className="flex items-baseline gap-2 min-w-0">
+                  <p className="font-bold text-base leading-tight truncate" style={{ color: 'white' }}>
+                    {p.name}
+                  </p>
+                  {p.age != null && (
+                    <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+                      {p.age}歳
+                    </span>
+                  )}
+                </div>
                 <span style={{ color: 'var(--gold)', flexShrink: 0 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="9 18 15 12 9 6"/>
@@ -93,23 +81,29 @@ export default function ParticipantListClient({
                 </span>
               </div>
 
-              {/* 活動（すぐ見える） */}
-              <div className="flex items-center gap-1 mt-1">
-                <ZapIcon size={11} />
-                <p className="text-xs leading-tight truncate" style={{ color: 'var(--gold)' }}>
+              {/* 活動 */}
+              <div className="mt-2">
+                <p className="text-xs font-bold mb-0.5" style={{ color: 'var(--gold)' }}>活動</p>
+                <p className="text-xs leading-snug truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
                   {p.activity}
                 </p>
               </div>
 
-              {/* 話したいこと */}
-              <div className="flex items-start gap-1 mt-2">
-                <span className="flex-shrink-0 mt-0.5" style={{ color: 'var(--text-muted)' }}>
-                  <ChatIcon size={11} />
-                </span>
+              {/* 夢 */}
+              <div className="mt-1.5">
+                <p className="text-xs font-bold mb-0.5" style={{ color: 'var(--gold)' }}>夢</p>
+                <p className="text-xs leading-snug truncate" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                  {p.dream}
+                </p>
+              </div>
+
+              {/* 話したい人 */}
+              <div className="mt-1.5">
+                <p className="text-xs font-bold mb-0.5" style={{ color: 'var(--gold)' }}>話したい人</p>
                 <p
                   className="text-xs leading-snug"
                   style={{
-                    color: 'var(--text-muted)',
+                    color: 'rgba(255,255,255,0.8)',
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
@@ -118,22 +112,6 @@ export default function ParticipantListClient({
                 >
                   {p.want_to_talk}
                 </p>
-              </div>
-
-              {/* タグ */}
-              <div className="mt-2">
-                <span
-                  className="text-xs px-2 py-0.5 rounded-full inline-block"
-                  style={{
-                    background: tag.bg,
-                    color: tag.text,
-                    border: `1px solid ${tag.border}`,
-                    fontSize: 10,
-                    fontWeight: 600,
-                  }}
-                >
-                  {p.dream.length > 18 ? p.dream.slice(0, 18) + '…' : p.dream}
-                </span>
               </div>
             </div>
           </Link>

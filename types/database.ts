@@ -8,6 +8,7 @@ export type Database = {
           id: string
           event_date: string
           name: string
+          age: number | null
           activity: string
           dream: string
           concern: string
@@ -19,6 +20,7 @@ export type Database = {
           id?: string
           event_date: string
           name: string
+          age?: number | null
           activity: string
           dream: string
           concern: string
@@ -30,6 +32,7 @@ export type Database = {
           id?: string
           event_date?: string
           name?: string
+          age?: number | null
           activity?: string
           dream?: string
           concern?: string

@@ -12,6 +12,7 @@ function RegisterForm() {
   const eventDate = searchParams.get('event') ?? new Date().toISOString().split('T')[0]
 
   const [name, setName] = useState('')
+  const [age, setAge] = useState('')
   const [activity, setActivity] = useState('')
   const [dream, setDream] = useState('')
   const [concern, setConcern] = useState('')
@@ -55,7 +56,7 @@ function RegisterForm() {
       }
       const { data, error: insertError } = await supabase
         .from('participants')
-        .insert({ event_date: eventDate, name, activity, dream, concern, want_to_talk: wantToTalk, outfit_photo_url: outfitPhotoUrl })
+        .insert({ event_date: eventDate, name, age: age ? parseInt(age) : null, activity, dream, concern, want_to_talk: wantToTalk, outfit_photo_url: outfitPhotoUrl })
         .select('id')
         .single()
       if (insertError) throw new Error('登録に失敗しました')
@@ -159,7 +160,15 @@ function RegisterForm() {
           <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
         </div>
 
-        <DarkField label="名前" required value={name} onChange={setName} placeholder="例: 山田 太郎" maxLength={30} />
+        {/* 名前・年齢 */}
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <DarkField label="名前" required value={name} onChange={setName} placeholder="例: 山田 太郎" maxLength={30} />
+          </div>
+          <div style={{ width: 80 }}>
+            <DarkField label="年齢" value={age} onChange={setAge} placeholder="25" maxLength={3} inputMode="numeric" />
+          </div>
+        </div>
         <DarkField label="活動・やっていること" required value={activity} onChange={setActivity} placeholder="例: AIスタートアップで開発してます" maxLength={100} multiline />
         <DarkField label="夢" required value={dream} onChange={setDream} placeholder="例: 日本の教育を変えること" maxLength={100} multiline />
         <DarkField label="今の悩み" required value={concern} onChange={setConcern} placeholder="例: 仲間の見つけ方がわからない" maxLength={150} multiline />
@@ -179,9 +188,9 @@ function RegisterForm() {
   )
 }
 
-function DarkField({ label, required, value, onChange, placeholder, maxLength, multiline }: {
+function DarkField({ label, required, value, onChange, placeholder, maxLength, multiline, inputMode }: {
   label: string; required?: boolean; value: string; onChange: (v: string) => void
-  placeholder: string; maxLength?: number; multiline?: boolean
+  placeholder: string; maxLength?: number; multiline?: boolean; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
 }) {
   return (
     <div>
@@ -194,7 +203,7 @@ function DarkField({ label, required, value, onChange, placeholder, maxLength, m
           className="dark-input" style={{ resize: 'none' }} />
       ) : (
         <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength}
-          className="dark-input" />
+          inputMode={inputMode} className="dark-input" />
       )}
       {maxLength && (
         <p className="text-right text-xs mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>{value.length}/{maxLength}</p>

@@ -69,9 +69,14 @@ export default async function ParticipantDetailPage({
 
       {/* 名前 */}
       <div className="px-5 mt-5">
-        <h1 className="text-3xl font-black" style={{ color: 'white', fontFamily: 'var(--font-space-mono)' }}>
-          {participant.name}
-        </h1>
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-3xl font-black" style={{ color: 'white', fontFamily: 'var(--font-space-mono)' }}>
+            {participant.name}
+          </h1>
+          {participant.age != null && (
+            <span className="text-lg font-bold" style={{ color: 'var(--text-muted)' }}>{participant.age}歳</span>
+          )}
+        </div>
         <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
           {new Date(participant.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} 登録
         </p>
