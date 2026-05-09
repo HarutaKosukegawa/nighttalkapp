@@ -7,13 +7,22 @@ import ParticipantListClient from './ParticipantListClient'
 import type { Participant } from '@/types/database'
 import { UsersIcon } from '@/components/Icons'
 
+// 参加者がいなくても常にタブ表示する開催日（古い順 → 左から並ぶ）
+const KNOWN_DATES = ['2026-05-10', '2026-05-16']
+
+// 日付ごとのカスタムイベント名（無指定時はデフォルトを使用）
+const EVENT_TITLES: Record<string, string> = {
+  '2026-05-10': 'よいしょ徳島！',
+}
+const DEFAULT_TITLE = '深夜の語り場'
+
 async function getEventDates(): Promise<string[]> {
   const { data } = await supabase
     .from('participants')
     .select('event_date')
-    .order('event_date', { ascending: false })
+    .order('event_date', { ascending: true })
   if (!data) return []
-  return [...new Set(data.map((r) => r.event_date))].sort((a, b) => b.localeCompare(a))
+  return [...new Set(data.map((r) => r.event_date))]
 }
 
 async function getParticipants(date: string): Promise<Participant[]> {
@@ -32,7 +41,9 @@ function formatTab(dateStr: string): string {
 
 function formatHeader(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('ja-JP', {
-    month: 'long', day: 'numeric', weekday: 'short',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
   })
 }
 
@@ -43,29 +54,43 @@ export default async function EventDatePage({
 }) {
   const { date } = await params
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) notFound()
-
   const today = new Date().toISOString().split('T')[0]
+
   const [dates, participants] = await Promise.all([getEventDates(), getParticipants(date)])
-  const allDates = dates.includes(date)
-    ? dates
-    : [...dates, date].sort((a, b) => b.localeCompare(a))
+
+  // KNOWN_DATES + DBの日付 + 現在表示中の日付 をマージし、昇順（古い順=左）でソート
+  const allDates = [...new Set([...KNOWN_DATES, ...dates, date])].sort((a, b) =>
+    a.localeCompare(b)
+  )
+
+  const eventTitle = EVENT_TITLES[date] ?? DEFAULT_TITLE
 
   return (
     <div className="min-h-screen pb-28">
       {/* ヘッダー */}
       <div className="px-5 pt-8 pb-4">
-        <p className="text-xs font-bold tracking-widest mb-1" style={{ color: 'var(--gold)', fontFamily: 'var(--font-space-mono)' }}>
+        <p
+          className="text-xs font-bold tracking-widest mb-1"
+          style={{ color: 'var(--gold)', fontFamily: 'var(--font-space-mono)' }}
+        >
           DEEP NIGHT GATHERING
         </p>
-        <h1 className="text-3xl" style={{ color: 'white', fontFamily: 'var(--font-brand)' }}>
-          深夜の語り場
+        <h1
+          className="text-3xl"
+          style={{ color: 'white', fontFamily: 'var(--font-brand)' }}
+        >
+          {eventTitle}
         </h1>
       </div>
 
       {/* 日付タブ */}
       <div
         className="sticky top-0 z-10 px-5 py-3 flex gap-2 overflow-x-auto"
-        style={{ background: 'rgba(6,12,26,0.85)', backdropFilter: 'blur(12px)', scrollbarWidth: 'none' }}
+        style={{
+          background: 'rgba(6,12,26,0.85)',
+          backdropFilter: 'blur(12px)',
+          scrollbarWidth: 'none',
+        }}
       >
         {allDates.map((d) => {
           const isActive = d === date
@@ -83,7 +108,10 @@ export default async function EventDatePage({
             >
               {formatTab(d)}
               {isToday && (
-                <span className="ml-1 text-xs" style={{ color: isActive ? '#060c1a' : 'var(--gold)' }}>
+                <span
+                  className="ml-1 text-xs"
+                  style={{ color: isActive ? '#060c1a' : 'var(--gold)' }}
+                >
                   今日
                 </span>
               )}
@@ -97,11 +125,16 @@ export default async function EventDatePage({
         <div className="flex items-center gap-2">
           <UsersIcon size={16} />
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            <span className="font-bold text-xl" style={{ color: 'white' }}>{participants.length}</span>
-            {' '}人 — {formatHeader(date)}
+            <span className="font-bold text-xl" style={{ color: 'white' }}>
+              {participants.length}
+            </span>{' '}
+            人 — {formatHeader(date)}
           </p>
         </div>
-        <Link href={`/register?event=${date}`} className="btn-primary text-sm py-2 px-4 inline-block">
+        <Link
+          href={`/register?event=${date}`}
+          className="btn-primary text-sm py-2 px-4 inline-block"
+        >
           + 登録する
         </Link>
       </div>
@@ -110,12 +143,24 @@ export default async function EventDatePage({
       {participants.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 px-5 text-center">
           <div className="mb-4" style={{ color: 'var(--gold)' }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1"
+              strokeLinecap="round"
+            >
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </div>
-          <p className="font-bold text-lg" style={{ color: 'white' }}>まだ参加者がいません</p>
-          <p className="text-sm mt-1 mb-6" style={{ color: 'var(--text-muted)' }}>最初の星になりましょう</p>
+          <p className="font-bold text-lg" style={{ color: 'white' }}>
+            まだ参加者がいません
+          </p>
+          <p className="text-sm mt-1 mb-6" style={{ color: 'var(--text-muted)' }}>
+            最初の星になりましょう
+          </p>
           <Link href={`/register?event=${date}`} className="btn-primary">
             自己紹介を登録する
           </Link>
