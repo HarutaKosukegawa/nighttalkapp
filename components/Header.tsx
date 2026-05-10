@@ -15,12 +15,15 @@ function HeaderInner() {
   const isRegister = pathname.startsWith('/register')
 
   // よいしょ徳島テーマの適用判定
-  // - /events/2026-05-10/... パス上、もしくは
-  // - /register?event=2026-05-10 のとき
+  // - /events/2026-05-10/...
+  // - /register?event=2026-05-10
   const eventParam = searchParams.get('event')
   const isYoisho =
     pathname.startsWith(`/events/${YOISHO_DATE}`) ||
     (isRegister && eventParam === YOISHO_DATE)
+
+  // ロゴテキスト（3人によって切り替え）
+  const logoText = isYoisho ? 'よいしょ徳島' : '深夜の語り場'
 
   // テーマカラー
   const headerBg = isYoisho ? 'rgba(244,228,196,0.92)' : 'rgba(6,12,26,0.85)'
@@ -28,7 +31,8 @@ function HeaderInner() {
   const logoColor = isYoisho ? '#5C3D20' : 'var(--gold)'
   const activeBg = isYoisho ? '#C97A3A' : 'var(--gold)'
   const activeText = isYoisho ? '#FFF8E7' : '#060c1a'
-  const inactiveText = isYoisho ? 'rgba(92,61,32,0.65)' : 'rgba(255,255,255,0.6)'
+  const inactiveText = isYoisho ? 'rgba(92,61,32,0.75)' : 'rgba(255,255,255,0.6)'
+  const inactiveBg = isYoisho ? 'rgba(92,61,32,0.06)' : 'transparent'
 
   return (
     <header
@@ -45,7 +49,7 @@ function HeaderInner() {
           className="text-base tracking-tight"
           style={{ color: logoColor, fontFamily: 'var(--font-brand)' }}
         >
-          深夜の語り場
+          {logoText}
         </span>
       </Link>
 
@@ -55,7 +59,7 @@ function HeaderInner() {
           href={`/events/${DEFAULT_EVENT_DATE}`}
           className="px-4 py-2 rounded-full text-sm font-bold transition-all"
           style={{
-            background: isHome ? activeBg : 'transparent',
+            background: isHome ? activeBg : inactiveBg,
             color: isHome ? activeText : inactiveText,
           }}
         >
@@ -65,7 +69,7 @@ function HeaderInner() {
           href={`/register?event=${DEFAULT_EVENT_DATE}`}
           className="px-4 py-2 rounded-full text-sm font-bold transition-all"
           style={{
-            background: isRegister ? activeBg : 'transparent',
+            background: isRegister ? activeBg : inactiveBg,
             color: isRegister ? activeText : inactiveText,
           }}
         >
