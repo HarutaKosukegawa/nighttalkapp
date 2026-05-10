@@ -7,7 +7,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { CameraIcon } from '@/components/Icons'
 
-// 日付ごとのテーマ（events/[date]/page.tsx と色を揃える）
+// 日付ごとのテーマ
 type EventTheme = {
   bodyBg: string
   text: string
@@ -51,24 +51,8 @@ const EVENT_THEMES: Record<string, EventTheme> = {
 }
 
 const EVENT_TITLES: Record<string, string> = {
-  '2026-05-10': 'よいしょ徳島',
+  '2026-05-10': 'よいしょ徳島！',
   '2026-05-16': '深夜の語り場',
-}
-
-// ファイル input を視覚的に隠すためのスタイル
-// display:none だと iOS Safari で .click() が不安定になるため、
-// オフスクリーン銅色でキャンバス上には残しつつ視覚的に見えないようにする
-const hiddenFileInputStyle: React.CSSProperties = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  opacity: 0,
-  overflow: 'hidden',
-  clip: 'rect(0,0,0,0)',
-  whiteSpace: 'nowrap',
-  border: 0,
-  padding: 0,
-  margin: -1,
 }
 
 function RegisterForm() {
@@ -96,13 +80,21 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // 写真選択時のハンドラー。URL.createObjectURL を使うと iOS でも高速にプレビュー可能。
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setPhotoFile(file)
-    const reader = new FileReader()
-    reader.onload = (ev) => setPhotoPreview(ev.target?.result as string)
-    reader.readAsDataURL(file)
+    try {
+      setPhotoPreview(URL.createObjectURL(file))
+    } catch {
+      // フォールバック: FileReader で base64 化
+      const reader = new FileReader()
+      reader.onload = (ev) => setPhotoPreview(ev.target?.result as string)
+      reader.readAsDataURL(file)
+    }
+    // 同じファイルを再選択できるように value をリセット
+    e.target.value = ''
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,6 +152,18 @@ function RegisterForm() {
     weekday: 'short',
   })
 
+  // input-as-overlay: input を視覚ボタンの上に opacity:0 で重ねるパターン。
+  // iOS Safari でも確実にファイルピッカーが開く、label+htmlFor より信頼性が高い。
+  const overlayInputStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0,
+    cursor: 'pointer',
+    zIndex: 2,
+  }
+
   return (
     <div className="min-h-screen pb-12" data-theme={theme ? 'yoisho' : undefined}>
       {theme && (
@@ -170,7 +174,7 @@ function RegisterForm() {
         />
       )}
 
-      {/* イベントページへ戻るリンク（QRで直接アクセスしたユーザーも見つけやすいように） */}
+      {/* イベントページへ戻るリンク */}
       <div className="px-5 pt-4 pb-1">
         <Link
           href={`/events/${eventDate}`}
@@ -206,12 +210,12 @@ function RegisterForm() {
           </p>
           {photoPreview ? (
             <div className="relative w-full rounded-2xl overflow-hidden mb-3" style={{ paddingBottom: '70%' }}>
-              <Image src={photoPreview} alt="プレビュー" fill style={{ objectFit: 'cover' }} />
+              <Image src={photoPreview} alt="プレビュー" fill style={{ objectFit: 'cover' }} unoptimized />
               <button
                 type="button"
                 onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
                 className="absolute top-2 right-2 px-3 py-1 rounded-full text-xs font-bold"
-                style={{ background: 'rgba(0,0,0,0.6)', color: 'white' }}
+                style={{ background: 'rgba(0,0,0,0.6)', color: 'white', zIndex: 5 }}
               >
                 削除
               </button>
@@ -235,54 +239,57 @@ function RegisterForm() {
             </div>
           )}
 
-          {/* iOS Safari でも確実に動よう label パターンを使用（button + .click() は display:none の file input で不安定のため） */}
+          {/* iOS Safari でも確実に動よう input-as-overlay パターン */}
           <div className="grid grid-cols-2 gap-3">
-            <label
-              htmlFor="photo-gallery-input"
-              className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer"
-              style={{
-                background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
-                border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
-                color: theme?.text ?? 'white',
-              }}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-              フォルダーから選ぶ
-            </label>
-            <label
-              htmlFor="photo-camera-input"
-              className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer"
-              style={{
-                background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)',
-                border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`,
-                color: accentColor,
-              }}
-            >
-              <CameraIcon size={22} />
-              今すぐ撮影する
-            </label>
-          </div>
+            {/* ギャラリーボタン */}
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                style={overlayInputStyle}
+                aria-label="フォルダーから写真を選ぶ"
+              />
+              <div
+                className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
+                style={{
+                  background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
+                  border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
+                  color: theme?.text ?? 'white',
+                }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+                フォルダーから選ぶ
+              </div>
+            </div>
 
-          {/* 視覚的に隠しつつ、label 経由でトリガーされる file input */}
-          <input
-            id="photo-gallery-input"
-            type="file"
-            accept="image/*"
-            onChange={handlePhotoChange}
-            style={hiddenFileInputStyle}
-          />
-          <input
-            id="photo-camera-input"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handlePhotoChange}
-            style={hiddenFileInputStyle}
-          />
+            {/* カメラボタン */}
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoChange}
+                style={overlayInputStyle}
+                aria-label="カメラで写真を撮る"
+              />
+              <div
+                className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
+                style={{
+                  background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)',
+                  border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`,
+                  color: accentColor,
+                }}
+              >
+                <CameraIcon size={22} />
+                今すぐ撮影する
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 名前・年齢 */}
@@ -356,25 +363,9 @@ function DarkField({
         {required && <span className="ml-1" style={{ color: ac }}>*</span>}
       </label>
       {multiline ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          maxLength={maxLength}
-          rows={3}
-          className="dark-input"
-          style={{ resize: 'none' }}
-        />
+        <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} rows={3} className="dark-input" style={{ resize: 'none' }} />
       ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          maxLength={maxLength}
-          inputMode={inputMode}
-          className="dark-input"
-        />
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} inputMode={inputMode} className="dark-input" />
       )}
       {maxLength && (
         <p className="text-right text-xs mt-1" style={{ color: cc }}>{value.length}/{maxLength}</p>
