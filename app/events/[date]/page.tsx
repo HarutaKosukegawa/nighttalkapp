@@ -16,6 +16,37 @@ const EVENT_TITLES: Record<string, string> = {
 }
 const DEFAULT_TITLE = '深夜の語り場'
 
+// 日付ごとのテーマ（背景とテキスト色の全体調整）
+type EventTheme = {
+  bodyBg: string         // body の背景（CSS 上書き）
+  text: string           // メインテキスト色
+  textMuted: string      // サブテキスト色
+  brand: string          // "DEEP NIGHT GATHERING" ラベル色
+  accent: string         // タブアクティブ・ボタン背景色
+  accentText: string     // アクセント上のテキスト色
+  panelBg: string        // 日付タブバー背景
+  inactiveTabBg: string
+  inactiveTabText: string
+  tabBorder: string
+  starsHidden: boolean
+}
+
+const EVENT_THEMES: Record<string, EventTheme> = {
+  '2026-05-10': {
+    bodyBg: 'linear-gradient(180deg, #F4E4C4 0%, #ECDCBC 100%)',
+    text: '#3D2817',
+    textMuted: '#8B6F47',
+    brand: '#A06030',
+    accent: '#C97A3A',
+    accentText: '#FFF8E7',
+    panelBg: 'rgba(244,228,196,0.85)',
+    inactiveTabBg: 'rgba(92,61,32,0.06)',
+    inactiveTabText: 'rgba(92,61,32,0.7)',
+    tabBorder: 'rgba(92,61,32,0.18)',
+    starsHidden: true,
+  },
+}
+
 async function getEventDates(): Promise<string[]> {
   const { data } = await supabase
     .from('participants')
@@ -64,20 +95,41 @@ export default async function EventDatePage({
   )
 
   const eventTitle = EVENT_TITLES[date] ?? DEFAULT_TITLE
+  const theme = EVENT_THEMES[date] ?? null
+
+  // テーマ適用時のカラー、未適用時は既存の夜空テーマ
+  const textColor = theme?.text ?? 'white'
+  const mutedColor = theme?.textMuted ?? 'var(--text-muted)'
+  const brandColor = theme?.brand ?? 'var(--gold)'
+  const accentBg = theme?.accent ?? 'var(--gold)'
+  const accentText = theme?.accentText ?? '#060c1a'
+  const panelBg = theme?.panelBg ?? 'rgba(6,12,26,0.85)'
+  const inactiveTabBg = theme?.inactiveTabBg ?? 'rgba(255,255,255,0.08)'
+  const inactiveTabText = theme?.inactiveTabText ?? 'rgba(255,255,255,0.7)'
+  const tabBorder = theme?.tabBorder ?? 'rgba(255,255,255,0.1)'
 
   return (
     <div className="min-h-screen pb-28">
+      {/* テーマごとのグローバルスタイル上書き（body背景・星空を切り替え） */}
+      {theme && (
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `body { background: ${theme.bodyBg} !important; } ${theme.starsHidden ? '.star-field, .shooting-star { display: none !important; }' : ''}`,
+          }}
+        />
+      )}
+
       {/* ヘッダー */}
       <div className="px-5 pt-8 pb-4">
         <p
           className="text-xs font-bold tracking-widest mb-1"
-          style={{ color: 'var(--gold)', fontFamily: 'var(--font-space-mono)' }}
+          style={{ color: brandColor, fontFamily: 'var(--font-space-mono)' }}
         >
           DEEP NIGHT GATHERING
         </p>
         <h1
           className="text-3xl"
-          style={{ color: 'white', fontFamily: 'var(--font-brand)' }}
+          style={{ color: textColor, fontFamily: 'var(--font-brand)' }}
         >
           {eventTitle}
         </h1>
@@ -87,7 +139,7 @@ export default async function EventDatePage({
       <div
         className="sticky top-0 z-10 px-5 py-3 flex gap-2 overflow-x-auto"
         style={{
-          background: 'rgba(6,12,26,0.85)',
+          background: panelBg,
           backdropFilter: 'blur(12px)',
           scrollbarWidth: 'none',
         }}
@@ -101,16 +153,16 @@ export default async function EventDatePage({
               href={`/events/${d}`}
               className="flex-shrink-0 px-4 py-2 rounded-full text-sm font-bold transition-all"
               style={{
-                background: isActive ? 'var(--gold)' : 'rgba(255,255,255,0.08)',
-                color: isActive ? '#060c1a' : 'rgba(255,255,255,0.7)',
-                border: isActive ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                background: isActive ? accentBg : inactiveTabBg,
+                color: isActive ? accentText : inactiveTabText,
+                border: isActive ? 'none' : `1px solid ${tabBorder}`,
               }}
             >
               {formatTab(d)}
               {isToday && (
                 <span
                   className="ml-1 text-xs"
-                  style={{ color: isActive ? '#060c1a' : 'var(--gold)' }}
+                  style={{ color: isActive ? accentText : accentBg }}
                 >
                   今日
                 </span>
@@ -122,18 +174,19 @@ export default async function EventDatePage({
 
       {/* 参加者数 + ボタン */}
       <div className="px-5 pt-4 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" style={{ color: mutedColor }}>
           <UsersIcon size={16} />
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            <span className="font-bold text-xl" style={{ color: 'white' }}>
+          <p className="text-sm">
+            <span className="font-bold text-xl" style={{ color: textColor }}>
               {participants.length}
-            </span>{' '}
-            人 — {formatHeader(date)}
+            </span>
+            {' '}人 — {formatHeader(date)}
           </p>
         </div>
         <Link
           href={`/register?event=${date}`}
           className="btn-primary text-sm py-2 px-4 inline-block"
+          style={theme ? { background: accentBg, color: accentText } : undefined}
         >
           + 登録する
         </Link>
@@ -142,7 +195,7 @@ export default async function EventDatePage({
       {/* 参加者一覧 */}
       {participants.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 px-5 text-center">
-          <div className="mb-4" style={{ color: 'var(--gold)' }}>
+          <div className="mb-4" style={{ color: accentBg }}>
             <svg
               width="48"
               height="48"
@@ -155,13 +208,17 @@ export default async function EventDatePage({
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
           </div>
-          <p className="font-bold text-lg" style={{ color: 'white' }}>
+          <p className="font-bold text-lg" style={{ color: textColor }}>
             まだ参加者がいません
           </p>
-          <p className="text-sm mt-1 mb-6" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-sm mt-1 mb-6" style={{ color: mutedColor }}>
             最初の星になりましょう
           </p>
-          <Link href={`/register?event=${date}`} className="btn-primary">
+          <Link
+            href={`/register?event=${date}`}
+            className="btn-primary"
+            style={theme ? { background: accentBg, color: accentText } : undefined}
+          >
             自己紹介を登録する
           </Link>
         </div>
