@@ -1,4 +1,5 @@
-export const dynamic = 'force-dynamic'
+// 10秒間キャッシュしてナビゲーションを高速化。参加者追加は最大 10 秒遅れて反映される。
+export const revalidate = 10
 
 import { supabase } from '@/lib/supabase'
 import { notFound } from 'next/navigation'
