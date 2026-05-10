@@ -57,7 +57,6 @@ export default function ParticipantListClient({
             className="overflow-hidden animate-fade-in-up block transition-all"
             style={{
               animationDelay: `${i * 30}ms`,
-              opacity: 0,
               background: c.cardBg,
               border: `1px solid ${c.cardBorder}`,
               borderRadius: 14,
