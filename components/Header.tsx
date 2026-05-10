@@ -23,7 +23,7 @@ function HeaderInner() {
     (isRegister && eventParam === YOISHO_DATE)
 
   // ロゴテキスト（3人によって切り替え）
-  const logoText = isYoisho ? 'よいしょ徳島' : '深夜の語り場'
+  const logoText = isYoisho ? 'よいしょ徳島！' : '深夜の語り場'
 
   // テーマカラー
   const headerBg = isYoisho ? 'rgba(244,228,196,0.92)' : 'rgba(6,12,26,0.85)'
