@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import Link from 'next/link'
+import Cropper, { Area } from 'react-easy-crop'
 import { CameraIcon } from '@/components/Icons'
 
 // 日付ごとのテーマ
@@ -55,6 +56,52 @@ const EVENT_TITLES: Record<string, string> = {
   '2026-05-16': '深夜の語り場',
 }
 
+// クロップした領域を canvas で切り取り、最大 1600px にリサイズし JPEG（q=0.85）として返す
+async function cropAndCompress(imageSrc: string, pixelCrop: Area, maxDim = 1600, quality = 0.85): Promise<Blob> {
+  const image = new window.Image()
+  image.crossOrigin = 'anonymous'
+  image.src = imageSrc
+  await new Promise((resolve, reject) => {
+    image.onload = () => resolve(null)
+    image.onerror = () => reject(new Error('image load failed'))
+  })
+
+  // 出力サイズを最大辺 maxDim にスケール
+  let outW = pixelCrop.width
+  let outH = pixelCrop.height
+  const longSide = Math.max(outW, outH)
+  if (longSide > maxDim) {
+    const scale = maxDim / longSide
+    outW = Math.round(outW * scale)
+    outH = Math.round(outH * scale)
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = outW
+  canvas.height = outH
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas ctx failed')
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    outW,
+    outH,
+  )
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('compress failed'))),
+      'image/jpeg',
+      quality,
+    )
+  })
+}
+
 function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -75,31 +122,70 @@ function RegisterForm() {
   const [dream, setDream] = useState('')
   const [concern, setConcern] = useState('')
   const [wantToTalk, setWantToTalk] = useState('')
-  const [photoFile, setPhotoFile] = useState<File | null>(null)
+
+  // 写真 state
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+
+  // クロップモーダル state
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
+  const [processing, setProcessing] = useState(false)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // 写真選択時のハンドラー。URL.createObjectURL を使うと iOS でも高速にプレビュー可能。
+  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
+    setCroppedAreaPixels(areaPixels)
+  }, [])
+
+  // ファイル選択 → クロップモーダルを開く
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setPhotoFile(file)
-    try {
-      setPhotoPreview(URL.createObjectURL(file))
-    } catch {
-      // フォールバック: FileReader で base64 化
-      const reader = new FileReader()
-      reader.onload = (ev) => setPhotoPreview(ev.target?.result as string)
-      reader.readAsDataURL(file)
+    const reader = new FileReader()
+    reader.onload = () => {
+      setRawImageSrc(reader.result as string)
+      setCrop({ x: 0, y: 0 })
+      setZoom(1)
     }
-    // 同じファイルを再選択できるように value をリセット
+    reader.readAsDataURL(file)
     e.target.value = ''
+  }
+
+  // クロップ確定 → 圧縮して保存
+  const handleCropConfirm = async () => {
+    if (!rawImageSrc || !croppedAreaPixels) return
+    setProcessing(true)
+    try {
+      const blob = await cropAndCompress(rawImageSrc, croppedAreaPixels)
+      setPhotoBlob(blob)
+      setPhotoPreview(URL.createObjectURL(blob))
+      setRawImageSrc(null)
+    } catch (err) {
+      console.error(err)
+      setError('写真の処理に失敗しました')
+      setRawImageSrc(null)
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleCropCancel = () => {
+    setRawImageSrc(null)
+  }
+
+  const handleDeletePhoto = () => {
+    setPhotoBlob(null)
+    if (photoPreview) URL.revokeObjectURL(photoPreview)
+    setPhotoPreview(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!photoFile || !name || !activity || !dream || !concern || !wantToTalk) {
+    if (!photoBlob || !name || !activity || !dream || !concern || !wantToTalk) {
       setError('すべての項目を入力してください（写真も必須です）')
       return
     }
@@ -109,14 +195,12 @@ function RegisterForm() {
 
     try {
       let outfitPhotoUrl: string | null = null
-
-      if (photoFile) {
-        const ext = photoFile.name.split('.').pop()
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+      if (photoBlob) {
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`
         const { error: uploadError } = await supabase.storage
           .from('outfits')
-          .upload(fileName, photoFile, { upsert: false })
-        if (uploadError) throw new Error('写真のアップロードに失敗しました')
+          .upload(fileName, photoBlob, { contentType: 'image/jpeg', upsert: false })
+        if (uploadError) throw new Error(`写真アップロード失敗: ${uploadError.message}`)
         const { data: urlData } = supabase.storage.from('outfits').getPublicUrl(fileName)
         outfitPhotoUrl = urlData.publicUrl
       }
@@ -131,11 +215,11 @@ function RegisterForm() {
           dream,
           concern,
           want_to_talk: wantToTalk,
-          outfit_photo_url: outfitPhotoUrl
+          outfit_photo_url: outfitPhotoUrl,
         })
         .select('id')
         .single()
-      if (insertError) throw new Error('登録に失敗しました')
+      if (insertError) throw new Error(`登録失敗: ${insertError.message}`)
 
       localStorage.setItem(`my_id_${eventDate}`, data.id)
       router.push(`/events/${eventDate}`)
@@ -152,8 +236,7 @@ function RegisterForm() {
     weekday: 'short',
   })
 
-  // input-as-overlay: input を視覚ボタンの上に opacity:0 で重ねるパターン。
-  // iOS Safari でも確実にファイルピッカーが開く、label+htmlFor より信頼性が高い。
+  // input-as-overlay スタイル
   const overlayInputStyle: React.CSSProperties = {
     position: 'absolute',
     inset: 0,
@@ -174,6 +257,62 @@ function RegisterForm() {
         />
       )}
 
+      {/* クロップモーダル */}
+      {rawImageSrc && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.92)' }}>
+          <div className="px-5 py-4 flex items-center justify-between" style={{ flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={handleCropCancel}
+              className="text-sm font-bold"
+              style={{ color: 'rgba(255,255,255,0.85)' }}
+            >
+              キャンセル
+            </button>
+            <h2 className="text-base font-bold" style={{ color: 'white' }}>位置を調整</h2>
+            <button
+              type="button"
+              onClick={handleCropConfirm}
+              disabled={processing}
+              className="text-sm font-bold px-3 py-1.5 rounded-full"
+              style={{ background: theme?.accent ?? 'var(--gold)', color: theme?.accentText ?? '#060c1a' }}
+            >
+              {processing ? '処理中...' : '確定'}
+            </button>
+          </div>
+          <div className="relative flex-1" style={{ minHeight: 0 }}>
+            <Cropper
+              image={rawImageSrc}
+              crop={crop}
+              zoom={zoom}
+              aspect={4 / 5}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+              showGrid
+            />
+          </div>
+          <div className="px-5 py-4" style={{ flexShrink: 0 }}>
+            <div className="flex items-center gap-3">
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>拡大</span>
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="flex-1"
+                style={{ accentColor: theme?.accent ?? '#C9A96E' }}
+              />
+            </div>
+            <p className="text-xs text-center mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              ドラッグで位置調整、スライダーで拡大縮小
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* イベントページへ戻るリンク */}
       <div className="px-5 pt-4 pb-1">
         <Link
@@ -187,109 +326,137 @@ function RegisterForm() {
 
       {/* ヘッダー */}
       <div className="px-5 pt-2 pb-6">
-        <p
-          className="text-xs font-bold tracking-widest mb-1"
-          style={{ color: brandColor, fontFamily: 'var(--font-space-mono)' }}
-        >
+        <p className="text-xs font-bold tracking-widest mb-1" style={{ color: brandColor, fontFamily: 'var(--font-space-mono)' }}>
           {formattedDate}
         </p>
-        <h1 className="text-2xl font-black" style={{ color: textColor, fontFamily: 'var(--font-space-mono)' }}>
-          自己紹介を登録
-        </h1>
+        <h1 className="text-2xl font-black" style={{ color: textColor, fontFamily: 'var(--font-space-mono)' }}>自己紹介を登録</h1>
         <p className="text-sm mt-1" style={{ color: mutedColor }}>話したい人を見つけよう</p>
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 space-y-5">
-        {/* 写真アップロード */}
+        {/* 写真 */}
         <div>
           <label className="block text-sm font-bold mb-1" style={{ color: labelColor }}>
             写真<span className="ml-1" style={{ color: accentColor }}>*</span>
           </label>
-          <p className="text-xs mb-3" style={{ color: accentColor }}>
-            服装か顔写真のどちらかでお願いします
-          </p>
+          <p className="text-xs mb-3" style={{ color: accentColor }}>服装か顔写真のどちらかでお願いします</p>
+
           {photoPreview ? (
-            <div className="relative w-full rounded-2xl overflow-hidden mb-3" style={{ paddingBottom: '70%' }}>
-              <Image src={photoPreview} alt="プレビュー" fill style={{ objectFit: 'cover' }} unoptimized />
-              <button
-                type="button"
-                onClick={() => { setPhotoFile(null); setPhotoPreview(null) }}
-                className="absolute top-2 right-2 px-3 py-1 rounded-full text-xs font-bold"
-                style={{ background: 'rgba(0,0,0,0.6)', color: 'white', zIndex: 5 }}
-              >
-                削除
-              </button>
-            </div>
+            <>
+              <div className="relative w-full rounded-2xl overflow-hidden mb-3" style={{ paddingBottom: '125%' }}>
+                <Image src={photoPreview} alt="プレビュー" fill style={{ objectFit: 'cover' }} unoptimized />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* 差し替え */}
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    style={overlayInputStyle}
+                    aria-label="写真を差し替える"
+                  />
+                  <div
+                    className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                    style={{
+                      background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
+                      border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
+                      color: theme?.text ?? 'white',
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M21 12a9 9 0 1 1-3.5-7.13" />
+                      <polyline points="21 4 21 10 15 10" />
+                    </svg>
+                    差し替え
+                  </div>
+                </div>
+                {/* 削除 */}
+                <button
+                  type="button"
+                  onClick={handleDeletePhoto}
+                  className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+                  style={{
+                    background: 'rgba(220,80,80,0.10)',
+                    border: '1px solid rgba(220,80,80,0.35)',
+                    color: '#C04040',
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6M14 11v6" />
+                  </svg>
+                  削除
+                </button>
+              </div>
+            </>
           ) : (
-            <div
-              className="w-full rounded-2xl flex items-center justify-center mb-3"
-              style={{
-                height: 100,
-                background: theme?.photoEmptyBg ?? 'rgba(255,255,255,0.04)',
-                border: `1.5px dashed ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
-              }}
-            >
+            <>
               <div
-                className="flex flex-col items-center gap-1"
-                style={{ color: theme?.textMuted ?? 'rgba(255,255,255,0.25)' }}
+                className="w-full rounded-2xl flex items-center justify-center mb-3"
+                style={{
+                  height: 100,
+                  background: theme?.photoEmptyBg ?? 'rgba(255,255,255,0.04)',
+                  border: `1.5px dashed ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
+                }}
               >
-                <CameraIcon size={28} />
-                <span className="text-xs">写真が選ばれていません</span>
+                <div className="flex flex-col items-center gap-1" style={{ color: theme?.textMuted ?? 'rgba(255,255,255,0.25)' }}>
+                  <CameraIcon size={28} />
+                  <span className="text-xs">写真が選ばれていません</span>
+                </div>
               </div>
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* ギャラリー */}
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    style={overlayInputStyle}
+                    aria-label="フォルダーから写真を選ぶ"
+                  />
+                  <div
+                    className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
+                    style={{
+                      background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
+                      border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
+                      color: theme?.text ?? 'white',
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                    フォルダーから選ぶ
+                  </div>
+                </div>
+                {/* カメラ */}
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoChange}
+                    style={overlayInputStyle}
+                    aria-label="カメラで写真を撮る"
+                  />
+                  <div
+                    className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
+                    style={{
+                      background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)',
+                      border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`,
+                      color: accentColor,
+                    }}
+                  >
+                    <CameraIcon size={22} />
+                    今すぐ撮影する
+                  </div>
+                </div>
+              </div>
+            </>
           )}
-
-          {/* iOS Safari でも確実に動よう input-as-overlay パターン */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* ギャラリーボタン */}
-            <div className="relative">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoChange}
-                style={overlayInputStyle}
-                aria-label="フォルダーから写真を選ぶ"
-              />
-              <div
-                className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
-                style={{
-                  background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
-                  border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
-                  color: theme?.text ?? 'white',
-                }}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-                フォルダーから選ぶ
-              </div>
-            </div>
-
-            {/* カメラボタン */}
-            <div className="relative">
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoChange}
-                style={overlayInputStyle}
-                aria-label="カメラで写真を撮る"
-              />
-              <div
-                className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
-                style={{
-                  background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)',
-                  border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`,
-                  color: accentColor,
-                }}
-              >
-                <CameraIcon size={22} />
-                今すぐ撮影する
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* 名前・年齢 */}
@@ -308,14 +475,7 @@ function RegisterForm() {
         <DarkField label="話したいこと・話したい人" required value={wantToTalk} onChange={setWantToTalk} placeholder="例: 起業経験のある人と資金調達について話したい" maxLength={200} multiline labelColor={labelColor} accentColor={accentColor} counterColor={counterColor} />
 
         {error && (
-          <p
-            className="text-sm p-3 rounded-xl"
-            style={{
-              background: theme?.errorBg ?? 'rgba(220,38,38,0.15)',
-              color: theme?.errorText ?? '#f87171',
-              border: `1px solid ${theme?.errorBorder ?? 'rgba(220,38,38,0.3)'}`,
-            }}
-          >
+          <p className="text-sm p-3 rounded-xl" style={{ background: theme?.errorBg ?? 'rgba(220,38,38,0.15)', color: theme?.errorText ?? '#f87171', border: `1px solid ${theme?.errorBorder ?? 'rgba(220,38,38,0.3)'}` }}>
             {error}
           </p>
         )}
