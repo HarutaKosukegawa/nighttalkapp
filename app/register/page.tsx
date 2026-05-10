@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useCallback, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
 import Link from 'next/link'
-import Cropper, { Area } from 'react-easy-crop'
 import { CameraIcon } from '@/components/Icons'
 
 // 日付ごとのテーマ
@@ -56,19 +55,31 @@ const EVENT_TITLES: Record<string, string> = {
   '2026-05-16': '深夜の語り場',
 }
 
-// クロップした領域を canvas で切り取り、最大 1600px にリサイズし JPEG（q=0.85）として返す
-async function cropAndCompress(imageSrc: string, pixelCrop: Area, maxDim = 1600, quality = 0.85): Promise<Blob> {
+// 画像を canvas で 4:5 ポートレートに切り取り、最大 1600px にリサイズ + JPEG（q=0.85）圧縮
+async function compressToPortrait(file: File, maxDim = 1600, quality = 0.85): Promise<Blob> {
+  const url = URL.createObjectURL(file)
   const image = new window.Image()
-  image.crossOrigin = 'anonymous'
-  image.src = imageSrc
+  image.src = url
   await new Promise((resolve, reject) => {
     image.onload = () => resolve(null)
     image.onerror = () => reject(new Error('image load failed'))
   })
+  URL.revokeObjectURL(url)
+
+  // 4:5 ポートレートにセンタークロップ
+  const targetRatio = 4 / 5
+  const srcRatio = image.width / image.height
+  let cropX = 0, cropY = 0, cropW = image.width, cropH = image.height
+  if (srcRatio > targetRatio) {
+    cropW = image.height * targetRatio
+    cropX = (image.width - cropW) / 2
+  } else {
+    cropH = image.width / targetRatio
+    cropY = (image.height - cropH) / 2
+  }
 
   // 出力サイズを最大辺 maxDim にスケール
-  let outW = pixelCrop.width
-  let outH = pixelCrop.height
+  let outW = cropW, outH = cropH
   const longSide = Math.max(outW, outH)
   if (longSide > maxDim) {
     const scale = maxDim / longSide
@@ -77,21 +88,11 @@ async function cropAndCompress(imageSrc: string, pixelCrop: Area, maxDim = 1600,
   }
 
   const canvas = document.createElement('canvas')
-  canvas.width = outW
-  canvas.height = outH
+  canvas.width = Math.round(outW)
+  canvas.height = Math.round(outH)
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('canvas ctx failed')
-  ctx.drawImage(
-    image,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    outW,
-    outH,
-  )
+  ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, outW, outH)
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -122,59 +123,28 @@ function RegisterForm() {
   const [dream, setDream] = useState('')
   const [concern, setConcern] = useState('')
   const [wantToTalk, setWantToTalk] = useState('')
-
-  // 写真 state
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-
-  // クロップモーダル state
-  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null)
-  const [crop, setCrop] = useState({ x: 0, y: 0 })
-  const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [processing, setProcessing] = useState(false)
-
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const onCropComplete = useCallback((_: Area, areaPixels: Area) => {
-    setCroppedAreaPixels(areaPixels)
-  }, [])
-
-  // ファイル選択 → クロップモーダルを開く
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      setRawImageSrc(reader.result as string)
-      setCrop({ x: 0, y: 0 })
-      setZoom(1)
-    }
-    reader.readAsDataURL(file)
     e.target.value = ''
-  }
-
-  // クロップ確定 → 圧縮して保存
-  const handleCropConfirm = async () => {
-    if (!rawImageSrc || !croppedAreaPixels) return
+    if (!file) return
     setProcessing(true)
+    setError('')
     try {
-      const blob = await cropAndCompress(rawImageSrc, croppedAreaPixels)
+      const blob = await compressToPortrait(file)
       setPhotoBlob(blob)
+      if (photoPreview) URL.revokeObjectURL(photoPreview)
       setPhotoPreview(URL.createObjectURL(blob))
-      setRawImageSrc(null)
-    } catch (err) {
-      console.error(err)
+    } catch {
       setError('写真の処理に失敗しました')
-      setRawImageSrc(null)
     } finally {
       setProcessing(false)
     }
-  }
-
-  const handleCropCancel = () => {
-    setRawImageSrc(null)
   }
 
   const handleDeletePhoto = () => {
@@ -189,10 +159,8 @@ function RegisterForm() {
       setError('すべての項目を入力してください（写真も必須です）')
       return
     }
-
     setLoading(true)
     setError('')
-
     try {
       let outfitPhotoUrl: string | null = null
       if (photoBlob) {
@@ -204,23 +172,12 @@ function RegisterForm() {
         const { data: urlData } = supabase.storage.from('outfits').getPublicUrl(fileName)
         outfitPhotoUrl = urlData.publicUrl
       }
-
       const { data, error: insertError } = await supabase
         .from('participants')
-        .insert({
-          event_date: eventDate,
-          name,
-          age: age ? parseInt(age) : null,
-          activity,
-          dream,
-          concern,
-          want_to_talk: wantToTalk,
-          outfit_photo_url: outfitPhotoUrl,
-        })
+        .insert({ event_date: eventDate, name, age: age ? parseInt(age) : null, activity, dream, concern, want_to_talk: wantToTalk, outfit_photo_url: outfitPhotoUrl })
         .select('id')
         .single()
       if (insertError) throw new Error(`登録失敗: ${insertError.message}`)
-
       localStorage.setItem(`my_id_${eventDate}`, data.id)
       router.push(`/events/${eventDate}`)
     } catch (err) {
@@ -230,13 +187,8 @@ function RegisterForm() {
     }
   }
 
-  const formattedDate = new Date(eventDate + 'T00:00:00').toLocaleDateString('ja-JP', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-  })
+  const formattedDate = new Date(eventDate + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })
 
-  // input-as-overlay スタイル
   const overlayInputStyle: React.CSSProperties = {
     position: 'absolute',
     inset: 0,
@@ -257,88 +209,21 @@ function RegisterForm() {
         />
       )}
 
-      {/* クロップモーダル */}
-      {rawImageSrc && (
-        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0,0,0,0.92)' }}>
-          <div className="px-5 py-4 flex items-center justify-between" style={{ flexShrink: 0 }}>
-            <button
-              type="button"
-              onClick={handleCropCancel}
-              className="text-sm font-bold"
-              style={{ color: 'rgba(255,255,255,0.85)' }}
-            >
-              キャンセル
-            </button>
-            <h2 className="text-base font-bold" style={{ color: 'white' }}>位置を調整</h2>
-            <button
-              type="button"
-              onClick={handleCropConfirm}
-              disabled={processing}
-              className="text-sm font-bold px-3 py-1.5 rounded-full"
-              style={{ background: theme?.accent ?? 'var(--gold)', color: theme?.accentText ?? '#060c1a' }}
-            >
-              {processing ? '処理中...' : '確定'}
-            </button>
-          </div>
-          <div className="relative flex-1" style={{ minHeight: 0 }}>
-            <Cropper
-              image={rawImageSrc}
-              crop={crop}
-              zoom={zoom}
-              aspect={4 / 5}
-              onCropChange={setCrop}
-              onZoomChange={setZoom}
-              onCropComplete={onCropComplete}
-              showGrid
-            />
-          </div>
-          <div className="px-5 py-4" style={{ flexShrink: 0 }}>
-            <div className="flex items-center gap-3">
-              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>拡大</span>
-              <input
-                type="range"
-                min="1"
-                max="3"
-                step="0.01"
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="flex-1"
-                style={{ accentColor: theme?.accent ?? '#C9A96E' }}
-              />
-            </div>
-            <p className="text-xs text-center mt-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              ドラッグで位置調整、スライダーで拡大縮小
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* イベントページへ戻るリンク */}
       <div className="px-5 pt-4 pb-1">
-        <Link
-          href={`/events/${eventDate}`}
-          className="inline-flex items-center gap-1 text-sm font-bold py-2 -ml-1 px-1"
-          style={{ color: brandColor }}
-        >
+        <Link href={`/events/${eventDate}`} className="inline-flex items-center gap-1 text-sm font-bold py-2 -ml-1 px-1" style={{ color: brandColor }}>
           ← {eventTitle}に戻る
         </Link>
       </div>
 
-      {/* ヘッダー */}
       <div className="px-5 pt-2 pb-6">
-        <p className="text-xs font-bold tracking-widest mb-1" style={{ color: brandColor, fontFamily: 'var(--font-space-mono)' }}>
-          {formattedDate}
-        </p>
+        <p className="text-xs font-bold tracking-widest mb-1" style={{ color: brandColor, fontFamily: 'var(--font-space-mono)' }}>{formattedDate}</p>
         <h1 className="text-2xl font-black" style={{ color: textColor, fontFamily: 'var(--font-space-mono)' }}>自己紹介を登録</h1>
         <p className="text-sm mt-1" style={{ color: mutedColor }}>話したい人を見つけよう</p>
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 space-y-5">
-        {/* 写真 */}
         <div>
-          <label className="block text-sm font-bold mb-1" style={{ color: labelColor }}>
-            写真<span className="ml-1" style={{ color: accentColor }}>*</span>
-          </label>
+          <label className="block text-sm font-bold mb-1" style={{ color: labelColor }}>写真<span className="ml-1" style={{ color: accentColor }}>*</span></label>
           <p className="text-xs mb-3" style={{ color: accentColor }}>服装か顔写真のどちらかでお願いします</p>
 
           {photoPreview ? (
@@ -347,41 +232,17 @@ function RegisterForm() {
                 <Image src={photoPreview} alt="プレビュー" fill style={{ objectFit: 'cover' }} unoptimized />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {/* 差し替え */}
                 <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    style={overlayInputStyle}
-                    aria-label="写真を差し替える"
-                  />
-                  <div
-                    className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                    style={{
-                      background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
-                      border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
-                      color: theme?.text ?? 'white',
-                    }}
-                  >
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} style={overlayInputStyle} aria-label="写真を差し替える" />
+                  <div className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2" style={{ background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)', border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`, color: theme?.text ?? 'white' }}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <path d="M21 12a9 9 0 1 1-3.5-7.13" />
                       <polyline points="21 4 21 10 15 10" />
                     </svg>
-                    差し替え
+                    {processing ? '処理中...' : '差し替え'}
                   </div>
                 </div>
-                {/* 削除 */}
-                <button
-                  type="button"
-                  onClick={handleDeletePhoto}
-                  className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-                  style={{
-                    background: 'rgba(220,80,80,0.10)',
-                    border: '1px solid rgba(220,80,80,0.35)',
-                    color: '#C04040',
-                  }}
-                >
+                <button type="button" onClick={handleDeletePhoto} className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2" style={{ background: 'rgba(220,80,80,0.10)', border: '1px solid rgba(220,80,80,0.35)', color: '#C04040' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <polyline points="3 6 5 6 21 6" />
                     <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
@@ -393,37 +254,16 @@ function RegisterForm() {
             </>
           ) : (
             <>
-              <div
-                className="w-full rounded-2xl flex items-center justify-center mb-3"
-                style={{
-                  height: 100,
-                  background: theme?.photoEmptyBg ?? 'rgba(255,255,255,0.04)',
-                  border: `1.5px dashed ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
-                }}
-              >
+              <div className="w-full rounded-2xl flex items-center justify-center mb-3" style={{ height: 100, background: theme?.photoEmptyBg ?? 'rgba(255,255,255,0.04)', border: `1.5px dashed ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}` }}>
                 <div className="flex flex-col items-center gap-1" style={{ color: theme?.textMuted ?? 'rgba(255,255,255,0.25)' }}>
                   <CameraIcon size={28} />
-                  <span className="text-xs">写真が選ばれていません</span>
+                  <span className="text-xs">{processing ? '処理中...' : '写真が選ばれていません'}</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {/* ギャラリー */}
                 <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    style={overlayInputStyle}
-                    aria-label="フォルダーから写真を選ぶ"
-                  />
-                  <div
-                    className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
-                    style={{
-                      background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
-                      border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
-                      color: theme?.text ?? 'white',
-                    }}
-                  >
+                  <input type="file" accept="image/*" onChange={handlePhotoChange} style={overlayInputStyle} aria-label="フォルダーから写真を選ぶ" />
+                  <div className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5" style={{ background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)', border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`, color: theme?.text ?? 'white' }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <rect x="3" y="3" width="18" height="18" rx="2" />
                       <circle cx="8.5" cy="8.5" r="1.5" />
@@ -432,24 +272,9 @@ function RegisterForm() {
                     フォルダーから選ぶ
                   </div>
                 </div>
-                {/* カメラ */}
                 <div className="relative">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onChange={handlePhotoChange}
-                    style={overlayInputStyle}
-                    aria-label="カメラで写真を撮る"
-                  />
-                  <div
-                    className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5"
-                    style={{
-                      background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)',
-                      border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`,
-                      color: accentColor,
-                    }}
-                  >
+                  <input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} style={overlayInputStyle} aria-label="カメラで写真を撮る" />
+                  <div className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5" style={{ background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)', border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`, color: accentColor }}>
                     <CameraIcon size={22} />
                     今すぐ撮影する
                   </div>
@@ -459,7 +284,6 @@ function RegisterForm() {
           )}
         </div>
 
-        {/* 名前・年齢 */}
         <div className="flex gap-3">
           <div className="flex-1">
             <DarkField label="名前" required value={name} onChange={setName} placeholder="例: 山田 太郎" maxLength={30} labelColor={labelColor} accentColor={accentColor} counterColor={counterColor} />
@@ -475,12 +299,10 @@ function RegisterForm() {
         <DarkField label="話したいこと・話したい人" required value={wantToTalk} onChange={setWantToTalk} placeholder="例: 起業経験のある人と資金調達について話したい" maxLength={200} multiline labelColor={labelColor} accentColor={accentColor} counterColor={counterColor} />
 
         {error && (
-          <p className="text-sm p-3 rounded-xl" style={{ background: theme?.errorBg ?? 'rgba(220,38,38,0.15)', color: theme?.errorText ?? '#f87171', border: `1px solid ${theme?.errorBorder ?? 'rgba(220,38,38,0.3)'}` }}>
-            {error}
-          </p>
+          <p className="text-sm p-3 rounded-xl" style={{ background: theme?.errorBg ?? 'rgba(220,38,38,0.15)', color: theme?.errorText ?? '#f87171', border: `1px solid ${theme?.errorBorder ?? 'rgba(220,38,38,0.3)'}` }}>{error}</p>
         )}
 
-        <button type="submit" disabled={loading} className="btn-primary w-full text-base" style={{ borderRadius: 14 }}>
+        <button type="submit" disabled={loading || processing} className="btn-primary w-full text-base" style={{ borderRadius: 14 }}>
           {loading ? '登録中...' : '登録して参加者を見る →'}
         </button>
       </form>
@@ -488,40 +310,13 @@ function RegisterForm() {
   )
 }
 
-function DarkField({
-  label,
-  required,
-  value,
-  onChange,
-  placeholder,
-  maxLength,
-  multiline,
-  inputMode,
-  labelColor,
-  accentColor,
-  counterColor,
-}: {
-  label: string
-  required?: boolean
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-  maxLength?: number
-  multiline?: boolean
-  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
-  labelColor?: string
-  accentColor?: string
-  counterColor?: string
-}) {
+function DarkField({ label, required, value, onChange, placeholder, maxLength, multiline, inputMode, labelColor, accentColor, counterColor }: { label: string; required?: boolean; value: string; onChange: (v: string) => void; placeholder: string; maxLength?: number; multiline?: boolean; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']; labelColor?: string; accentColor?: string; counterColor?: string }) {
   const lc = labelColor ?? 'rgba(255,255,255,0.8)'
   const ac = accentColor ?? 'var(--gold)'
   const cc = counterColor ?? 'rgba(255,255,255,0.2)'
   return (
     <div>
-      <label className="block text-sm font-bold mb-2" style={{ color: lc }}>
-        {label}
-        {required && <span className="ml-1" style={{ color: ac }}>*</span>}
-      </label>
+      <label className="block text-sm font-bold mb-2" style={{ color: lc }}>{label}{required && <span className="ml-1" style={{ color: ac }}>*</span>}</label>
       {multiline ? (
         <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} maxLength={maxLength} rows={3} className="dark-input" style={{ resize: 'none' }} />
       ) : (
