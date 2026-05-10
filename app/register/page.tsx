@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useRef, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Image from 'next/image'
+import Link from 'next/link'
 import { CameraIcon } from '@/components/Icons'
 
 // 日付ごとのテーマ（events/[date]/page.tsx と色を揃える）
@@ -49,11 +50,33 @@ const EVENT_THEMES: Record<string, EventTheme> = {
   },
 }
 
+const EVENT_TITLES: Record<string, string> = {
+  '2026-05-10': 'よいしょ徳島',
+  '2026-05-16': '深夜の語り場',
+}
+
+// ファイル input を視覚的に隠すためのスタイル
+// display:none だと iOS Safari で .click() が不安定になるため、
+// オフスクリーン銅色でキャンバス上には残しつつ視覚的に見えないようにする
+const hiddenFileInputStyle: React.CSSProperties = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  opacity: 0,
+  overflow: 'hidden',
+  clip: 'rect(0,0,0,0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+  padding: 0,
+  margin: -1,
+}
+
 function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const eventDate = searchParams.get('event') ?? new Date().toISOString().split('T')[0]
   const theme = EVENT_THEMES[eventDate] ?? null
+  const eventTitle = EVENT_TITLES[eventDate] ?? 'イベント'
 
   const textColor = theme?.text ?? 'white'
   const mutedColor = theme?.textMuted ?? 'var(--text-muted)'
@@ -72,8 +95,6 @@ function RegisterForm() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const galleryInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -149,8 +170,19 @@ function RegisterForm() {
         />
       )}
 
+      {/* イベントページへ戻るリンク（QRで直接アクセスしたユーザーも見つけやすいように） */}
+      <div className="px-5 pt-4 pb-1">
+        <Link
+          href={`/events/${eventDate}`}
+          className="inline-flex items-center gap-1 text-sm font-bold py-2 -ml-1 px-1"
+          style={{ color: brandColor }}
+        >
+          ← {eventTitle}に戻る
+        </Link>
+      </div>
+
       {/* ヘッダー */}
-      <div className="px-5 pt-6 pb-6">
+      <div className="px-5 pt-2 pb-6">
         <p
           className="text-xs font-bold tracking-widest mb-1"
           style={{ color: brandColor, fontFamily: 'var(--font-space-mono)' }}
@@ -203,11 +235,11 @@ function RegisterForm() {
             </div>
           )}
 
+          {/* iOS Safari でも確実に動よう label パターンを使用（button + .click() は display:none の file input で不安定のため） */}
           <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => galleryInputRef.current?.click()}
-              className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5 transition-all"
+            <label
+              htmlFor="photo-gallery-input"
+              className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer"
               style={{
                 background: theme?.galleryBtnBg ?? 'rgba(255,255,255,0.07)',
                 border: `1px solid ${theme?.inputBorder ?? 'rgba(255,255,255,0.15)'}`,
@@ -220,11 +252,10 @@ function RegisterForm() {
                 <polyline points="21 15 16 10 5 21" />
               </svg>
               フォルダーから選ぶ
-            </button>
-            <button
-              type="button"
-              onClick={() => cameraInputRef.current?.click()}
-              className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5 transition-all"
+            </label>
+            <label
+              htmlFor="photo-camera-input"
+              className="py-3 rounded-xl text-sm font-bold flex flex-col items-center gap-1.5 transition-all cursor-pointer"
               style={{
                 background: theme?.cameraBtnBg ?? 'rgba(201,169,110,0.12)',
                 border: `1px solid ${theme ? 'rgba(201,122,58,0.35)' : 'rgba(201,169,110,0.35)'}`,
@@ -233,11 +264,25 @@ function RegisterForm() {
             >
               <CameraIcon size={22} />
               今すぐ撮影する
-            </button>
+            </label>
           </div>
 
-          <input ref={galleryInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
-          <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
+          {/* 視覚的に隠しつつ、label 経由でトリガーされる file input */}
+          <input
+            id="photo-gallery-input"
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoChange}
+            style={hiddenFileInputStyle}
+          />
+          <input
+            id="photo-camera-input"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoChange}
+            style={hiddenFileInputStyle}
+          />
         </div>
 
         {/* 名前・年齢 */}
