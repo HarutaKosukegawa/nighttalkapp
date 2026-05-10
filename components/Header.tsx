@@ -3,27 +3,39 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-const EVENT_DATE = '2026-05-16'
+// デフォルトで表示するイベント日・登録を検出するテーマ対象日
+// 5/10ページ（「よいしょ徳島！」）ではクリーム色に切り替える
+const DEFAULT_EVENT_DATE = '2026-05-10'
+const YOISHO_DATE = '2026-05-10'
 
 export default function Header() {
   const pathname = usePathname()
   const isHome = pathname.startsWith('/events') || pathname === '/'
   const isRegister = pathname.startsWith('/register')
+  const isYoisho = pathname.startsWith(`/events/${YOISHO_DATE}`)
+
+  // テーマカラー
+  const headerBg = isYoisho ? 'rgba(244,228,196,0.92)' : 'rgba(6,12,26,0.85)'
+  const borderColor = isYoisho ? 'rgba(92,61,32,0.18)' : 'rgba(255,255,255,0.07)'
+  const logoColor = isYoisho ? '#5C3D20' : 'var(--gold)'
+  const activeBg = isYoisho ? '#C97A3A' : 'var(--gold)'
+  const activeText = isYoisho ? '#FFF8E7' : '#060c1a'
+  const inactiveText = isYoisho ? 'rgba(92,61,32,0.65)' : 'rgba(255,255,255,0.6)'
 
   return (
     <header
       className="sticky top-0 z-50 flex items-center justify-between px-5 py-3"
       style={{
-        background: 'rgba(6,12,26,0.85)',
+        background: headerBg,
         backdropFilter: 'blur(16px)',
-        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        borderBottom: `1px solid ${borderColor}`,
       }}
     >
       {/* ロゴ */}
-      <Link href={`/events/${EVENT_DATE}`}>
+      <Link href={`/events/${DEFAULT_EVENT_DATE}`}>
         <span
           className="text-base tracking-tight"
-          style={{ color: 'var(--gold)', fontFamily: 'var(--font-brand)' }}
+          style={{ color: logoColor, fontFamily: 'var(--font-brand)' }}
         >
           深夜の語り場
         </span>
@@ -32,21 +44,21 @@ export default function Header() {
       {/* ナビ */}
       <nav className="flex items-center gap-1">
         <Link
-          href={`/events/${EVENT_DATE}`}
+          href={`/events/${DEFAULT_EVENT_DATE}`}
           className="px-4 py-2 rounded-full text-sm font-bold transition-all"
           style={{
-            background: isHome ? 'var(--gold)' : 'transparent',
-            color: isHome ? '#060c1a' : 'rgba(255,255,255,0.6)',
+            background: isHome ? activeBg : 'transparent',
+            color: isHome ? activeText : inactiveText,
           }}
         >
           ホーム
         </Link>
         <Link
-          href={`/register?event=${EVENT_DATE}`}
+          href={`/register?event=${DEFAULT_EVENT_DATE}`}
           className="px-4 py-2 rounded-full text-sm font-bold transition-all"
           style={{
-            background: isRegister ? 'var(--gold)' : 'transparent',
-            color: isRegister ? '#060c1a' : 'rgba(255,255,255,0.6)',
+            background: isRegister ? activeBg : 'transparent',
+            color: isRegister ? activeText : inactiveText,
           }}
         >
           登録
