@@ -1,18 +1,26 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 
 // デフォルトで表示するイベント日・登録を検出するテーマ対象日
-// 5/10ページ（「よいしょ徳島！」）ではクリーム色に切り替える
 const DEFAULT_EVENT_DATE = '2026-05-10'
 const YOISHO_DATE = '2026-05-10'
 
-export default function Header() {
+function HeaderInner() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const isHome = pathname.startsWith('/events') || pathname === '/'
   const isRegister = pathname.startsWith('/register')
-  const isYoisho = pathname.startsWith(`/events/${YOISHO_DATE}`)
+
+  // よいしょ徳島テーマの適用判定
+  // - /events/2026-05-10/... パス上、もしくは
+  // - /register?event=2026-05-10 のとき
+  const eventParam = searchParams.get('event')
+  const isYoisho =
+    pathname.startsWith(`/events/${YOISHO_DATE}`) ||
+    (isRegister && eventParam === YOISHO_DATE)
 
   // テーマカラー
   const headerBg = isYoisho ? 'rgba(244,228,196,0.92)' : 'rgba(6,12,26,0.85)'
@@ -65,5 +73,21 @@ export default function Header() {
         </Link>
       </nav>
     </header>
+  )
+}
+
+export default function Header() {
+  // useSearchParams を使うために Suspense 境界を設ける
+  return (
+    <Suspense
+      fallback={
+        <header
+          className="sticky top-0 z-50 h-12"
+          style={{ background: 'rgba(6,12,26,0.85)' }}
+        />
+      }
+    >
+      <HeaderInner />
+    </Suspense>
   )
 }
