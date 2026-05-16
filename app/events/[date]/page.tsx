@@ -9,7 +9,7 @@ import type { Participant } from '@/types/database'
 import { UsersIcon } from '@/components/Icons'
 
 // 参加者がいなくても常にタブ表示する開催日（古い順 → 左から並ぶ）
-const KNOWN_DATES = ['2026-05-10', '2026-05-16']
+const KNOWN_DATES = ['2026-05-10', '2026-05-16', '2026-06-07']
 
 // 日付ごとのカスタムイベント名（無指定時はデフォルトを使用）
 const EVENT_TITLES: Record<string, string> = {
