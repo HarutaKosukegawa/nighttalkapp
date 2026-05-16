@@ -53,6 +53,7 @@ const EVENT_THEMES: Record<string, EventTheme> = {
 const EVENT_TITLES: Record<string, string> = {
   '2026-05-10': 'よいしょ徳島！',
   '2026-05-16': '深夜の語り場',
+  '2026-06-07': '深夜の語り場',
 }
 
 // 画像を canvas で 4:5 ポートレートに切り取り、最大 1600px にリサイズ + JPEG（q=0.85）圧縮
