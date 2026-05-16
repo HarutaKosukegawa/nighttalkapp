@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 
-// デフォルトで表示するイベント日・登録を検出するテーマ対象日
-const DEFAULT_EVENT_DATE = '2026-05-10'
-const YOISHO_DATE = '2026-05-10'
+// デフォルト・イベント日とよいしょ徳島日
+const DEFAULT_EVENT_DATE = '2026-05-10'  // 「ホーム」タブ・「登録」タブのなべり先
+const SHINYA_DATE = '2026-05-16'         // 「深夜の語り場」ロゴのリンク先
+const YOISHO_DATE = '2026-05-10'         // 「よいしょ徳島！」ロゴのリンク先
 
 function HeaderInner() {
   const pathname = usePathname()
@@ -22,8 +23,9 @@ function HeaderInner() {
     pathname.startsWith(`/events/${YOISHO_DATE}`) ||
     (isRegister && eventParam === YOISHO_DATE)
 
-  // ロゴテキスト（3人によって切り替え）
+  // ロゴテキストとリンク先（ブランドと一致させる）
   const logoText = isYoisho ? 'よいしょ徳島！' : '深夜の語り場'
+  const logoHref = isYoisho ? `/events/${YOISHO_DATE}` : `/events/${SHINYA_DATE}`
 
   // テーマカラー
   const headerBg = isYoisho ? 'rgba(244,228,196,0.92)' : 'rgba(6,12,26,0.85)'
@@ -43,8 +45,8 @@ function HeaderInner() {
         borderBottom: `1px solid ${borderColor}`,
       }}
     >
-      {/* ロゴ */}
-      <Link href={`/events/${DEFAULT_EVENT_DATE}`}>
+      {/* ロゴ：表示しているブランドの参加者一覧へ */}
+      <Link href={logoHref}>
         <span
           className="text-base tracking-tight"
           style={{ color: logoColor, fontFamily: 'var(--font-brand)' }}
