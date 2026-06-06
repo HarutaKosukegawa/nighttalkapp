@@ -6,7 +6,7 @@ import { Suspense } from 'react'
 
 // デフォルト・イベント日とよいしょ徳島日
 const DEFAULT_EVENT_DATE = '2026-05-10'  // 「ホーム」タブ・「登録」タブのなべり先
-const SHINYA_DATE = '2026-05-16'         // 「深夜の語り場」ロゴのリンク先
+const SHINYA_DATE = '2026-06-07'         // 「深夜の語り場」ロゴのリンク先
 const YOISHO_DATE = '2026-05-10'         // 「よいしょ徳島！」ロゴのリンク先
 
 function HeaderInner() {
